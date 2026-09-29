@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>SDQ Finance - Income & Expense Tracker</title>
+    
+    <!-- Link both local and css/ for backward compatibility -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Firebase SDKs (Compat version for simplicity in vanilla JS) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container no-print" aria-live="polite"></div>
+
+    <!-- Authentication Container -->
+    <div id="auth-container" class="container auth-wrapper">
+        <div class="auth-header">
+            <div class="brand-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            </div>
+            <h2 id="auth-title">Login to Finance Tracker</h2>
+            <p class="auth-subtitle">Track your daily income, expenses & bank accounts</p>
+        </div>
+
+        <!-- Protocol Warning (shown only when opened via file://) -->
+        <div id="protocol-warning" class="protocol-warning-card" style="display: none;">
+            <h3>
+                <span>⚠️ Local Server Required for Cloud Sync</span>
+            </h3>
+            <p>You opened this file directly via <code>file://</code>. Browsers disable Firebase login tokens on local files.</p>
+            
+            <button type="button" onclick="startDemoMode()" class="btn-income" style="width: 100%; margin-bottom: 12px; min-height: 44px; font-size: 0.92rem; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                <span>Use App Instantly in Offline Mode</span>
+            </button>
+
+            <p><strong>Or run the local web server:</strong> In your terminal, run:</p>
+            <div class="code-box">
+                <code>./start.sh</code>
+                <button type="button" class="btn-copy" onclick="navigator.clipboard.writeText('./start.sh'); showToast('Copied to clipboard!', 'success');">Copy</button>
+            </div>
+            <p style="font-size: 0.8rem; margin-top: 4px; color: #78350f;">
+                Then open <a href="http://localhost:5000" target="_blank">http://localhost:5000</a>
+            </p>
+        </div>
+
+        <form id="auth-form">
+            <div class="form-group">
+                <label for="auth-email">Email Address</label>
+                <input type="email" id="auth-email" required placeholder="you@example.com" autocomplete="email">
+            </div>
+            <div class="form-group" style="margin-top: 12px;">
+                <label for="auth-password">Password</label>
+                <input type="password" id="auth-password" required placeholder="••••••••" autocomplete="current-password">
+            </div>
+            <div class="form-group" style="margin-top: 18px;">
+                <button type="submit" id="auth-action-btn" class="btn-primary" style="width: 100%;">
+                    <span>Login</span>
+                </button>
+            </div>
+            
+            <div style="text-align: center; margin: 16px 0; color: #94a3b8; font-size: 0.85rem; display: flex; align-items: center; gap: 10px;">
+                <span style="flex: 1; height: 1px; background: var(--border);"></span>
+                <span>OR</span>
+                <span style="flex: 1; height: 1px; background: var(--border);"></span>
+            </div>
+            
+            <div class="form-group">
+                <button type="button" id="google-login-btn" style="width: 100%; background-color: white; color: #334155; border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 600; min-height: 48px; border-radius: var(--radius-md); box-shadow: var(--shadow-xs);">
+                    <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
+                    Continue with Google
+                </button>
+            </div>
+
+            <div class="form-group" style="margin-top: 12px;">
+                <button type="button" id="demo-mode-btn" onclick="startDemoMode()" style="width: 100%; background: #f8fafc; color: var(--text-secondary); border: 1.5px dashed var(--border); display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; min-height: 44px; border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s ease;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <span>Continue in Offline / Demo Mode</span>
+                </button>
+            </div>
+
+            <p class="auth-toggle">
+                <span id="auth-toggle-text">Don't have an account? </span>
+                <a href="#" id="auth-toggle-btn">Register here</a>
+            </p>
+        </form>
+    </div>
+
+    <!-- Main Application Interface (Hidden initially) -->
+    <div id="app-container" class="container" style="display: none;">
+        <!-- Top App Bar -->
+        <header class="app-header">
+            <div class="brand-wrapper">
+                <div class="brand-icon">
+                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                </div>
+                <div class="brand-text">
+                    <h1>SDQ Finance</h1>
+                    <span class="app-subtitle">Personal Budget & Tracker</span>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <div class="user-badge" id="user-badge" title="Logged in user">
+                    <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    <span id="user-display-email">User</span>
+                </div>
+                <button id="logout-btn" class="btn-logout" title="Log out">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    <span>Logout</span>
+                </button>
+            </div>
+        </header>
+        
+        <!-- Desktop Navigation Tabs (Hidden on mobile) -->
+        <nav class="desktop-tabs no-print" aria-label="Desktop navigation">
+            <button class="tab-button active" data-tab="add-transaction" onclick="openTab('add-transaction')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                <span>Add Transaction</span>
+            </button>
+            <button class="tab-button" data-tab="view-transactions" onclick="openTab('view-transactions')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                <span>Transactions</span>
+            </button>
+            <button class="tab-button" data-tab="bank-summary" onclick="openTab('bank-summary')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                <span>Bank Summary</span>
+            </button>
+            <button class="tab-button" data-tab="type-summary" onclick="openTab('type-summary')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                <span>Type Summary</span>
+            </button>
+            <button class="tab-button" data-tab="reports" onclick="openTab('reports')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                <span>Reports</span>
+            </button>
+        </nav>
+        
+        <!-- Tab 1: Add Transaction -->
+        <div id="add-transaction" class="tab-content active">
+            <!-- Overall Balance Summary Cards -->
+            <div class="stats-container">
+                <div class="stat-card balance">
+                    <div class="stat-card-header">
+                        <h3>Net Balance</h3>
+                        <div class="stat-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="net-balance">0.00</div>
+                </div>
+
+                <div class="stat-card income">
+                    <div class="stat-card-header">
+                        <h3>Total Income</h3>
+                        <div class="stat-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="total-income">0.00</div>
+                </div>
+
+                <div class="stat-card expense">
+                    <div class="stat-card-header">
+                        <h3>Total Expense</h3>
+                        <div class="stat-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="total-expense">0.00</div>
+                </div>
+            </div>
+
+            <!-- Form Card -->
+            <div class="card-form">
+                <div class="section-header">
+                    <h2 class="section-title" id="form-title">Add New Transaction</h2>
+                    <p class="section-desc">Record your spending or incoming funds</p>
+                </div>
+                
+                <form id="transaction-form">
+                    <input type="hidden" id="transaction-id">
+
+                    <!-- Mobile-First Segmented Control for Expense vs Income -->
+                    <div class="segmented-control" role="radiogroup" aria-label="Transaction Type">
+                        <button type="button" class="segment-btn active expense-active" id="segment-expense" onclick="setTransactionType('expense')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+                            <span>Expense</span>
+                        </button>
+                        <button type="button" class="segment-btn" id="segment-income" onclick="setTransactionType('income')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+                            <span>Income</span>
+                        </button>
+                    </div>
+
+                    <!-- Hidden native select for full compatibility with existing logic -->
+                    <select id="transaction_type" required style="display: none;">
+                        <option value="expense" selected>Expense</option>
+                        <option value="income">Income</option>
+                    </select>
+                    
+                    <div class="form-grid two-col">
+                        <div class="form-group">
+                            <label for="amount">Amount *</label>
+                            <div class="input-with-prefix">
+                                <span class="input-prefix">₹</span>
+                                <input type="number" id="amount" step="0.01" inputmode="decimal" required placeholder="0.00">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="transaction_date">Date *</label>
+                            <input type="date" id="transaction_date" required>
+                            <div class="quick-date-row">
+                                <button type="button" class="quick-date-btn" onclick="setQuickDate(0)">Today</button>
+                                <button type="button" class="quick-date-btn" onclick="setQuickDate(-1)">Yesterday</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-grid two-col" style="margin-top: 14px;">
+                        <div class="form-group">
+                            <label for="description">Category / Type</label>
+                            <input type="text" id="description" list="category-suggestions" placeholder="e.g., Food, Salary, Rent">
+                            <datalist id="category-suggestions">
+                                <option value="Food & Dining">
+                                <option value="Grocery">
+                                <option value="Salary">
+                                <option value="House Rent">
+                                <option value="Utility Bills">
+                                <option value="Fuel & Travel">
+                                <option value="Shopping">
+                                <option value="Medical">
+                                <option value="Entertainment">
+                                <option value="Transfer">
+                            </datalist>
+                            <div class="chips-container" id="quick-category-chips">
+                                <button type="button" class="chip-btn" onclick="pickCategory('Food')">🍔 Food</button>
+                                <button type="button" class="chip-btn" onclick="pickCategory('Grocery')">🛒 Grocery</button>
+                                <button type="button" class="chip-btn" onclick="pickCategory('Salary')">💼 Salary</button>
+                                <button type="button" class="chip-btn" onclick="pickCategory('Rent')">🏠 Rent</button>
+                                <button type="button" class="chip-btn" onclick="pickCategory('Fuel')">⛽ Fuel</button>
+                                <button type="button" class="chip-btn" onclick="pickCategory('Bills')">💡 Bills</button>
+                                <button type="button" class="chip-btn" onclick="pickCategory('Shopping')">🛍️ Shopping</button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="bank_name">Cash / Bank Account</label>
+                            <select id="bank_name">
+                                <option value="">-- Select Account --</option>
+                                <option value="SBI">SBI</option>
+                                <option value="CASH">CASH</option>
+                                <option value="FED">FED</option>
+                                <option value="SBI ACHU">SBI ACHU</option>
+                                <option value="NORTH">NORTH</option>
+                                <option value="Rashi">Rashi</option>
+                                <option value="AMAZON">AMAZON</option>
+                            </select>
+                            <div class="chips-container" style="margin-top: 8px;">
+                                <button type="button" class="chip-btn" onclick="pickBank('CASH')">💵 Cash</button>
+                                <button type="button" class="chip-btn" onclick="pickBank('SBI')">🏦 SBI</button>
+                                <button type="button" class="chip-btn" onclick="pickBank('FED')">🏦 FED</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 14px;">
+                        <label for="account_number">Note / Additional Details</label>
+                        <input type="text" id="account_number" placeholder="Optional details, receipt reference, or recipient">
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" id="submit-btn" class="btn-expense" style="flex: 2;">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            <span>Add Expense</span>
+                        </button>
+                        <button type="button" id="cancel-btn" class="btn-secondary" style="display:none; flex: 1;" onclick="resetForm()">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Tab 2: View Transactions -->
+        <div id="view-transactions" class="tab-content">
+            <div class="section-header">
+                <h2 class="section-title">Transactions History</h2>
+                <p class="section-desc">Search, filter, view and manage your records</p>
+            </div>
+
+            <!-- Modern Search & Filter Toolbar -->
+            <div class="toolbar-card no-print">
+                <div class="search-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="search" id="tx-search" placeholder="Search category, bank, or notes..." oninput="handleSearch(this.value)">
+                </div>
+
+                <div class="filter-row">
+                    <div class="filter-pills">
+                        <button type="button" class="filter-pill active" data-type="all" onclick="setTxFilterType('all', this)">All</button>
+                        <button type="button" class="filter-pill" data-type="expense" onclick="setTxFilterType('expense', this)">Expenses</button>
+                        <button type="button" class="filter-pill" data-type="income" onclick="setTxFilterType('income', this)">Income</button>
+                    </div>
+
+                    <select id="filter-bank" class="filter-bank-select" onchange="handleBankFilter(this.value)" title="Filter by bank">
+                        <option value="">All Accounts</option>
+                        <!-- Dynamically populated -->
+                    </select>
+
+                    <button type="button" id="btn-toggle-select" class="btn-select-mode" onclick="toggleSelectMode()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                        <span id="select-mode-text">Select</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Sticky Bulk Actions Bar -->
+            <div id="bulk-actions" class="bulk-actions-bar no-print" style="display: none;">
+                <span id="selected-count">0 items selected</span>
+                <div class="bulk-btn-group">
+                    <button onclick="showBulkEdit()" class="btn-primary">Edit</button>
+                    <button onclick="bulkDelete()" class="btn-expense">Delete</button>
+                    <button onclick="clearSelection()" class="btn-secondary" style="background: rgba(255,255,255,0.2); color: white;">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Mobile-first Cards List View (< 860px) -->
+            <div id="transactions-cards-list" class="transactions-list-view">
+                <!-- Javascript will populate mobile cards -->
+            </div>
+
+            <!-- Desktop Table View (>= 860px) -->
+            <div class="desktop-table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="no-print" style="width: 44px; text-align: center;">
+                                <input type="checkbox" id="select-all" onclick="toggleSelectAll()" title="Select All">
+                            </th>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Category</th>
+                            <th>Bank</th>
+                            <th>Details</th>
+                            <th class="no-print" style="text-align: center;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactions-table-body">
+                        <!-- Javascript will populate this -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Tab 3: Bank Summary -->
+        <div id="bank-summary" class="tab-content">
+            <div class="section-header">
+                <h2 class="section-title">Accounts & Balances</h2>
+                <p class="section-desc">Overview of your cash in hand and bank accounts</p>
+            </div>
+
+            <!-- Interactive Account Cards Grid -->
+            <div id="bank-cards-grid" class="bank-cards-grid">
+                <!-- Javascript will populate account cards -->
+            </div>
+
+            <div class="desktop-table-wrapper" style="margin-top: 10px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Account Name</th>
+                            <th>Total Income</th>
+                            <th>Total Expense</th>
+                            <th>Net Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bank-summary-body">
+                        <!-- Javascript will populate this -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Tab 4: Type Summary -->
+        <div id="type-summary" class="tab-content">
+            <div class="section-header">
+                <h2 class="section-title">Spending Analytics</h2>
+                <p class="section-desc">Category breakdown and monthly cash flow</p>
+            </div>
+
+            <div id="type-summary-container">
+                <!-- Javascript will populate this with clean monthly cards & progress bars -->
+            </div>
+        </div>
+        
+        <!-- Tab 5: Reports -->
+        <div id="reports" class="tab-content">
+            <div class="section-header">
+                <h2 class="section-title">SDQ Report</h2>
+                <p class="section-desc">Generate official statements and account summaries</p>
+            </div>
+            
+            <div class="card-form no-print">
+                <form id="report-filter-form" onsubmit="generateReport(event)">
+                    <div class="form-grid three-col">
+                        <div class="form-group">
+                            <label for="report_bank">Select Account *</label>
+                            <select id="report_bank" required>
+                                <option value="">-- Select Bank --</option>
+                                <!-- Javascript will populate options -->
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="report_start_date">From Date</label>
+                            <input type="date" id="report_start_date">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="report_end_date">To Date</label>
+                            <input type="date" id="report_end_date">
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions" style="margin-top: 16px;">
+                        <button type="submit" class="btn-primary" style="flex: 2;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            <span>Generate Report</span>
+                        </button>
+                        <button type="button" onclick="window.print()" class="btn-secondary no-print" style="flex: 1;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                            <span>Print</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <div id="report-result" class="print-only">
+                <!-- Javascript will populate report here -->
+            </div>
+        </div>
+
+        <!-- Bulk Edit Modal / Bottom Sheet -->
+        <div id="bulk-edit-modal" class="bottom-sheet-modal">
+            <div class="sheet-handle"></div>
+            <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 6px;">Bulk Edit Selected</h3>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 18px;">
+                Update fields for <strong id="bulk-edit-count" style="color: var(--primary);">0</strong> selected transactions.
+            </p>
+            
+            <form id="bulk-edit-form" onsubmit="applyBulkEdit(event)">
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="update-type-check"> 
+                        <span>Update Type:</span>
+                    </label>
+                    <select id="bulk_transaction_type" style="margin-top: 6px;">
+                        <option value="expense">Expense</option>
+                        <option value="income">Income</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="update-bank-check"> 
+                        <span>Update Bank / Cash:</span>
+                    </label>
+                    <select id="bulk_bank_name" style="margin-top: 6px;">
+                        <option value="">-- Select --</option>
+                        <option value="SBI">SBI</option>
+                        <option value="CASH">CASH</option>
+                        <option value="FED">FED</option>
+                        <option value="SBI ACHU">SBI ACHU</option>
+                        <option value="NORTH">NORTH</option>
+                        <option value="Rashi">Rashi</option>
+                        <option value="AMAZON">AMAZON</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="update-desc-check"> 
+                        <span>Update Category / Description:</span>
+                    </label>
+                    <input type="text" id="bulk_description" placeholder="e.g., Food, Travel" style="margin-top: 6px;">
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn-income" style="flex: 2;">Apply Changes</button>
+                    <button type="button" onclick="closeBulkEdit()" class="btn-secondary" style="flex: 1;">Cancel</button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Backdrop Overlay -->
+        <div id="modal-overlay" onclick="closeBulkEdit()"></div>
+
+        <!-- Mobile Bottom Navigation Bar (Visible only on <= 768px) -->
+        <nav class="bottom-nav no-print" aria-label="Mobile navigation">
+            <button class="bottom-nav-item active" data-tab="add-transaction" onclick="openTab('add-transaction')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                <span>Add</span>
+            </button>
+            
+            <button class="bottom-nav-item" data-tab="view-transactions" onclick="openTab('view-transactions')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                <span>History</span>
+            </button>
+            
+            <button class="bottom-nav-item" data-tab="bank-summary" onclick="openTab('bank-summary')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                <span>Accounts</span>
+            </button>
+            
+            <button class="bottom-nav-item" data-tab="type-summary" onclick="openTab('type-summary')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                <span>Trends</span>
+            </button>
+            
+            <button class="bottom-nav-item" data-tab="reports" onclick="openTab('reports')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                <span>Reports</span>
+            </button>
+        </nav>
+    </div> <!-- End App Container -->
+
+    <!-- Load scripts: direct path and fallback to js/ -->
+    <script src="app.js"></script>
+    <script>
+        // Tab switching logic for both desktop tabs and mobile bottom nav
+        function openTab(tabName) {
+            const tabContents = document.getElementsByClassName("tab-content");
+            for (let i = 0; i < tabContents.length; i++) {
+                tabContents[i].classList.remove("active");
+            }
+            
+            const allNavButtons = document.querySelectorAll(".tab-button, .bottom-nav-item");
+            allNavButtons.forEach(btn => {
+                if (btn.getAttribute('data-tab') === tabName) {
+                    btn.classList.add("active");
+                } else {
+                    btn.classList.remove("active");
+                }
+            });
+            
+            const target = document.getElementById(tabName);
+            if (target) {
+                target.classList.add("active");
+            }
+
+            // Scroll smoothly to top on mobile
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
