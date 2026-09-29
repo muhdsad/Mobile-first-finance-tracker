@@ -8,6 +8,11 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>SDQ Finance - Income & Expense Tracker</title>
     
+    <!-- PWA & Android Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icons/favicon.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    
     <!-- Link both local and css/ for backward compatibility -->
     <link rel="stylesheet" href="styles.css">
     
@@ -109,6 +114,10 @@
             </div>
 
             <div class="header-actions">
+                <button type="button" id="pwa-install-btn" class="btn-install-app no-print" onclick="installPWA()" title="Install App on Android Phone or Tablet" style="display: none;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                    <span>Install App</span>
+                </button>
                 <div class="user-badge" id="user-badge" title="Logged in user">
                     <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                     <span id="user-display-email">User</span>
@@ -561,6 +570,43 @@
 
             // Scroll smoothly to top on mobile
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // -------------------------------------------------------------
+        // ANDROID PWA INSTALLATION & SERVICE WORKER
+        // -------------------------------------------------------------
+        if ('serviceWorker' in navigator && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('PWA ServiceWorker registered with scope:', reg.scope))
+                    .catch(err => console.log('ServiceWorker registration error:', err));
+            });
+        }
+
+        let deferredInstallPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent immediate browser mini-infobar on mobile
+            e.preventDefault();
+            deferredInstallPrompt = e;
+            // Reveal the prominent "Install App" button in the header
+            const installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) installBtn.style.display = 'inline-flex';
+        });
+
+        function installPWA() {
+            if (deferredInstallPrompt) {
+                deferredInstallPrompt.prompt();
+                deferredInstallPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        showToast("Installing SDQ Finance to your device...", "success");
+                    }
+                    deferredInstallPrompt = null;
+                    const installBtn = document.getElementById('pwa-install-btn');
+                    if (installBtn) installBtn.style.display = 'none';
+                });
+            } else {
+                showToast("To install: Open browser menu (⋮) and tap 'Install app' or 'Add to Home Screen'", "info");
+            }
         }
     </script>
 </body>

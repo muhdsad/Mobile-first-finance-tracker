@@ -1,0 +1,6 @@
+{
+  "appId": "com.sdq.finance",
+  "appName": "SDQ Finance",
+  "webDir": ".",
+  "bundledWebRuntime": false
+}
